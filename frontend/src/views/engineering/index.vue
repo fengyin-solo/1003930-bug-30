@@ -47,7 +47,7 @@
           <td>{{ row.status }}</td>
           <td class="row-actions">
             <button
-              v-for="action in actions"
+              v-for="action in allowedActions(row)"
               :key="action"
               class="link"
               type="button"
@@ -55,6 +55,7 @@
             >
               {{ action }}
             </button>
+            <span v-if="!allowedActions(row).length" class="muted">—</span>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -64,7 +65,7 @@
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条治理工程记录</span>
+      <span>共 {{ total }} 条治理工程记录（项目状态按开工/竣工日期统一回填，人工修改不会被覆盖）</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -74,6 +75,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  availableActions,
   downloadEntries,
   listEntries,
   moduleMeta,
@@ -82,10 +84,8 @@ import {
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('engineering')
-const columns = ["项目编号", "隐患点编号", "治理方案", "承建方", "合同金额", "开工日期", "计划工期", "项目状态"]
-const actions = ["启动招标", "开工确认", "申请验收"]
+const columns = ["项目编号", "隐患点编号", "治理方案", "承建方", "合同金额", "开工日期", "竣工日期", "计划工期", "项目状态"]
 const statuses = ["待立项", "招标中", "施工中", "已竣工", "待验收"]
-const stats = [{"label": "项目总数", "value": 0}, {"label": "施工中数", "value": 0}, {"label": "待验收数", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
@@ -98,6 +98,16 @@ const statusSummary = computed(() =>
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+// 统计卡片直接由同一份列表汇总，不再各写一套硬编码口径。
+const stats = computed(() => [
+  { label: '项目总数', value: rows.value.length },
+  { label: '施工中数', value: rows.value.filter((row) => String(row.status) === '施工中').length },
+  { label: '待验收数', value: rows.value.filter((row) => String(row.status) === '待验收').length },
+])
+
+function allowedActions(row: EntryRow): string[] {
+  return availableActions(meta.key, row)
+}
 
 function resetFilters() {
   filters.value = {}

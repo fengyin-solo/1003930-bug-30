@@ -47,7 +47,7 @@
           <td>{{ row.status }}</td>
           <td class="row-actions">
             <button
-              v-for="action in actions"
+              v-for="action in allowedActions(row)"
               :key="action"
               class="link"
               type="button"
@@ -55,6 +55,7 @@
             >
               {{ action }}
             </button>
+            <span v-if="!allowedActions(row).length" class="muted">—</span>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -64,7 +65,7 @@
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条工程验收记录</span>
+      <span>共 {{ total }} 条工程验收记录（「工程状态」取自治理工程同一口径，只有待验收项目可发起验收）</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -74,6 +75,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  availableActions,
   downloadEntries,
   listEntries,
   moduleMeta,
@@ -82,10 +84,8 @@ import {
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('acceptance')
-const columns = ["验收编号", "项目编号", "验收类型", "验收日期", "验收组成员", "验收结论", "整改意见", "验收状态"]
-const actions = ["启动验收", "确认通过", "要求整改"]
+const columns = ["验收编号", "项目编号", "验收类型", "验收日期", "验收组成员", "验收结论", "整改意见", "验收状态", "工程状态"]
 const statuses = ["待验收", "验收中", "验收通过", "需整改", "已驳回"]
-const stats = [{"label": "待验收项目", "value": 0}, {"label": "通过项目数", "value": 0}, {"label": "整改中项目", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
@@ -98,6 +98,16 @@ const statusSummary = computed(() =>
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+// 统计卡片直接由同一份列表汇总：待验收看记录状态，通过与整改中保持同一口径。
+const stats = computed(() => [
+  { label: '待验收项目', value: rows.value.filter((row) => String(row.status) === '待验收').length },
+  { label: '通过项目数', value: rows.value.filter((row) => String(row.status) === '验收通过').length },
+  { label: '整改中项目', value: rows.value.filter((row) => String(row.status) === '需整改').length },
+])
+
+function allowedActions(row: EntryRow): string[] {
+  return availableActions(meta.key, row)
+}
 
 function resetFilters() {
   filters.value = {}

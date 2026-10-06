@@ -13,6 +13,10 @@ export function moduleMeta(key: string): ModuleMeta {
   return meta
 }
 
+function terminalStatus(meta: ModuleMeta): string {
+  return meta.terminalStatus ?? meta.statuses[meta.statuses.length - 1]
+}
+
 export function filterRows(rows: EntryRow[], filters: Record<string, string>): EntryRow[] {
   const pairs = Object.entries(filters).filter(([, value]) => value.trim() !== '')
   if (pairs.length === 0) {
@@ -26,6 +30,19 @@ export function filterRows(rows: EntryRow[], filters: Record<string, string>): E
 export function listEntries(key: string, filters: Record<string, string> = {}): PageResult {
   const matched = filterRows(listRows(key), filters)
   return { items: matched, total: matched.length, page: 1, size: matched.length }
+}
+
+/** 当前记录可执行的动作：统一按模块的来源状态闸门过滤，页面不再各写一套判断。 */
+export function availableActions(key: string, row: EntryRow): string[] {
+  const meta = moduleMeta(key)
+  const current = String(row.status)
+  return meta.actions.filter((action) => {
+    const allowed = meta.actionGuards?.[action]
+    if (allowed && !allowed.includes(current)) {
+      return false
+    }
+    return meta.actionTargets[action] !== current
+  })
 }
 
 export function runAction(key: string, id: number, action: string): ActionResult {
@@ -43,16 +60,48 @@ export function runAction(key: string, id: number, action: string): ActionResult
   if (current === target) {
     return { ok: false, message: `${meta.entity}已经是「${target}」，不用重复操作` }
   }
-  const lastStatus = meta.statuses[meta.statuses.length - 1]
+  const allowedSources = meta.actionGuards?.[action]
+  if (allowedSources && !allowedSources.includes(current)) {
+    return {
+      ok: false,
+      message: `只有「${allowedSources.join('、')}」的${meta.entity}才能${action}，当前状态「${current}」`,
+    }
+  }
   const updated: EntryRow = {
     ...rows[index],
     status: target,
-    pending: target !== lastStatus,
+    pending: target !== terminalStatus(meta),
     abnormal: NEGATIVE_ACTIONS.some((verb) => action.startsWith(verb)),
+    // 人工动作落库即锁定：之后统一初始化不会再用日期回填覆盖它。
+    _manual: true,
   }
   const next = [...rows]
   next[index] = updated
-  saveRows(key, next)
+
+  // 治理工程申请验收后，验收侧记录镜像同一结论，保证两个页面口径一致。
+  if (key === 'engineering' && action === '申请验收') {
+    const projectCode = String(updated['项目编号'])
+    const acceptanceRows = listRows('acceptance')
+    const acceptanceIndex = acceptanceRows.findIndex(
+      (row) => String(row['项目编号']) === projectCode,
+    )
+    if (acceptanceIndex < 0) {
+      saveRows(key, next, [id])
+      return {
+        ok: true,
+        message: `${meta.entity}已${action}，当前状态「${target}」；验收报告登记入口尚未接入，请在工程验收模块补登记`,
+      }
+    }
+    const acceptanceNext = [...acceptanceRows]
+    acceptanceNext[acceptanceIndex] = {
+      ...acceptanceRows[acceptanceIndex],
+      '工程状态': target,
+    }
+    saveRows(key, next, [id])
+    saveRows('acceptance', acceptanceNext)
+  } else {
+    saveRows(key, next, [id])
+  }
   return { ok: true, message: `${meta.entity}已${action}，当前状态「${target}」` }
 }
 
@@ -68,7 +117,7 @@ export function exportEntries(key: string): { filename: string; content: string 
   for (const row of listRows(key)) {
     lines.push([row.id, ...meta.fields.map((field) => row[field] ?? ''), row.status].join(','))
   }
-  return { filename: `${meta.name}-清单.csv`, content: `\uFEFF${lines.join('\n')}` }
+  return { filename: `${meta.name}-清单.csv`, content: `﻿${lines.join('\n')}` }
 }
 
 export function downloadEntries(key: string): void {
