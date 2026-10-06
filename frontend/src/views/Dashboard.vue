@@ -29,7 +29,7 @@
       </tbody>
     </table>
     <footer class="page-foot">
-      <span>数据保存在本机浏览器里，换浏览器或清缓存会回到示例数据</span>
+      <span>数据保存在本机浏览器里（版本化存储，启动时统一初始化）；换浏览器或清缓存会回到示例数据，初始化异常可查 console 的 [data-init] 日志</span>
     </footer>
   </section>
 </template>

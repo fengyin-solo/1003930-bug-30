@@ -1,5 +1,6 @@
 import { MODULE_BY_KEY } from '@/data/modules'
 import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
+import { isPending, mirrorStatusField } from '@/data/derive'
 import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
@@ -43,12 +44,17 @@ export function runAction(key: string, id: number, action: string): ActionResult
   if (current === target) {
     return { ok: false, message: `${meta.entity}已经是「${target}」，不用重复操作` }
   }
-  const lastStatus = meta.statuses[meta.statuses.length - 1]
   const updated: EntryRow = {
     ...rows[index],
     status: target,
-    pending: target !== lastStatus,
+    pending: isPending(meta, target),
     abnormal: NEGATIVE_ACTIONS.some((verb) => action.startsWith(verb)),
+  }
+  // 末尾「状态」展示字段（项目状态/验收状态…）与核心 status 同步，
+  // 列表、详情字段与动作流转在任何页面看到的结论一致。
+  const mirror = mirrorStatusField(meta)
+  if (mirror) {
+    updated[mirror] = target
   }
   const next = [...rows]
   next[index] = updated

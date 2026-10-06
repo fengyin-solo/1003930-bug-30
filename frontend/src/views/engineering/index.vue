@@ -82,10 +82,14 @@ import {
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('engineering')
-const columns = ["项目编号", "隐患点编号", "治理方案", "承建方", "合同金额", "开工日期", "计划工期", "项目状态"]
+const columns = meta.fields
 const actions = ["启动招标", "开工确认", "申请验收"]
 const statuses = ["待立项", "招标中", "施工中", "已竣工", "待验收"]
-const stats = [{"label": "项目总数", "value": 0}, {"label": "施工中数", "value": 0}, {"label": "待验收数", "value": 0}]
+const stats = computed(() => [
+  { label: "项目总数", value: rows.value.length },
+  { label: "施工中数", value: rows.value.filter((row) => String(row.status) === "施工中").length },
+  { label: "待验收数", value: rows.value.filter((row) => String(row.status) === "待验收").length },
+])
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
